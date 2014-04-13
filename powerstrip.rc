@@ -1,0 +1,42 @@
+#!/bin/bash
+
+PATH=/usr/local/bin:/usr/local/sbin:/bin:/usr/bin:/sbin:/usr/sbin
+DAEMON=$(type --path powerstrip 2>/dev/null)
+PIDFILE=/var/run/powerstrip.pid
+
+test -n "$DAEMON" -a -x "$DAEMON" || exit 0
+
+case "$1" in
+  start)
+	echo -n "Starting powerstrip daemon"
+        if start-stop-daemon --quiet --stop --signal 0 --pidfile "$PIDFILE" >&/dev/null
+	then
+		echo " already running."
+		exit
+	fi
+	/sbin/start-stop-daemon --start --quiet --background --make-pidfile --pidfile "$PIDFILE" --exec "$DAEMON" --startas /bin/bash -- -c "pid=; trap 'kill \$pid >&/dev/null; exit 0' INT TERM HUP QUIT; while :; do $DAEMON & pid=\$!; wait \$pid; done"
+	echo "."
+	;;
+  stop)
+	echo -n "Stopping powerstrip daemon"
+	if start-stop-daemon --quiet --stop --signal 0 --pidfile "$PIDFILE" >&/dev/null
+	then
+		start-stop-daemon --quiet --stop --pidfile "$PIDFILE"
+		# Now we wait for it to die
+		while start-stop-daemon --quiet --stop --signal 0 --pidfile "$PIDFILE" >&/dev/null; do sleep 1; done
+		echo "."
+		rm -f "$PIDFILE"
+	else
+		echo " not running.";
+	fi
+	;;
+  force-reload|restart)
+	$0 stop
+	$0 start
+	;;
+  *)
+	echo "Usage: /etc/init.d/powerstrip {start|stop|restart|force-reload}"
+	exit 1
+esac
+
+exit 0
