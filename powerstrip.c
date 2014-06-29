@@ -604,7 +604,7 @@ static int checkHosts(const char **hosts, int num, int tmo) {
   return rc;
 }
 
-static void switchPower(int state) {
+static void switchPower(int state, int port) {
 #ifdef serialPort
   int fd = TEMP_FAILURE_RETRY(open(serialPort, O_RDWR | O_NOCTTY | O_SYNC));
   if (fd < 0) {
@@ -636,38 +636,41 @@ static void switchPower(int state) {
   }
 
   // Change state and enable reporting of current status.
-  if (TEMP_FAILURE_RETRY(write(fd, state ? "c(" : "a(", 2)) != 2) {
+  if (TEMP_FAILURE_RETRY(write(fd, &("a(b(c(d("[4*state+2*port]), 2)) != 2) {
     goto err1;
   }
   TEMP_FAILURE_RETRY(tcdrain(fd));
 
   for (char ch;;) {
     // Read status. Status is reported as a sequence of eight "0" or "1"
-    // characters. We care about the first character position, only.
+    // characters. We care about the first or second character position, only.
     for (char nl = 0;;) {
       if (TEMP_FAILURE_RETRY(read(fd, &ch, sizeof(ch)) != 1)) {
         goto err1;
       }
       if (ch == '\r' || ch == '\n') {
         nl = 1;
-      } else if (nl == 1 && (ch == '0' || ch == '1')) {
-        char buf[7];
-        for (size_t len = 0; len < sizeof(buf);) {
-          ssize_t rc = TEMP_FAILURE_RETRY(read(fd, buf + len, sizeof(buf)-len));
-          if (rc <= 0) {
-            goto err1;
+      } else if (nl && (ch == '0' || ch == '1')) {
+        if (port+1 == nl++) {
+          char buf[7];
+          for (size_t len = 0; len < sizeof(buf)-port;) {
+            ssize_t rc = TEMP_FAILURE_RETRY(read(fd, buf + len,
+                                                 sizeof(buf)-len-port));
+            if (rc <= 0) {
+              goto err1;
+            }
+            len += rc;
           }
-          len += rc;
+          break;
         }
-        break;
       } else {
         nl = 0;
       }
     }
-  
+
     // Check if we actually need to do anything.
     if ((ch == '0') != state) {
-      if (TEMP_FAILURE_RETRY(write(fd, state ? "c" : "a", sizeof(char)))
+      if (TEMP_FAILURE_RETRY(write(fd, &("abcd"[2*state+port]), sizeof(char)))
                              != sizeof(char)) {
         goto err1;
       }
@@ -778,16 +781,39 @@ static void networkFailed(void) {
       powercycleDelay = maxPowercycleDelay;
     }
   }
-  switchPower(0);
+  switchPower(0, 0);
   sleep(powercycleTime);
-  switchPower(1);
+  switchPower(1, 0);
 }
 
 static void alrm(int signo) {
 }
 
 int main(int argc, char *argv[]) {
-  switchPower(1);
+  if ((argc >= 2 && argc <= 4) &&
+      (strstr(argv[1], "cycle") ||
+       !strcmp(argv[1], "on") || !strcmp(argv[1], "off"))) {
+    int port = argc >= 3 && !!strstr(argv[2], "switch");
+    int delay = argc >= 4 ? atoi(argv[3]) : 10;
+    if (strstr(argv[1], "cycle") || !strcmp(argv[1], "off")) {
+      switchPower(0, port);
+    }
+    if (strstr(argv[1], "cycle")) {
+      sleep(delay);
+    }
+    if (strstr(argv[1], "cycle") || !strcmp(argv[1], "on")) {
+      switchPower(1, port);
+    }
+    return 0;
+  } else if (argc != 1) {
+    fprintf(stderr, "Usage: %s [ cycle|on|off [ modem|switch [ delay ] ] ]\n",
+            argv[0]);
+    return 1;
+  }
+
+  signal(SIGPIPE, SIG_IGN);
+  switchPower(1, 0);
+  switchPower(1, 1);
 
   // Install a signal handler for SIGALRM. This signal handler doesn't actually
   // do anything. But having a signal handler means that upon receiving a
@@ -843,6 +869,8 @@ int main(int argc, char *argv[]) {
       // Create list of hosts that we need to test against.
       int setSize = 0;
       const char *hosts[numHosts-1];
+      memset(hosts, 0, sizeof(hosts));
+
       for (int i = 0; i < numHosts; ++i) {
         if (i == idx) {
           continue;
@@ -863,11 +891,11 @@ int main(int argc, char *argv[]) {
       // Test hosts
       for (int start = 0, step = 1; start < setSize; ) {
         if (start + step > setSize) {
-          step = numHosts-1-start;
+          step = setSize-start;
         }
         if (!checkHosts(hosts + start, step, shortHostTimeOut)) {
           // The network is still up, but one of our hosts is down.
-          // Disable this host for a an exponentially larger number of
+          // Disable this host for an exponentially larger number of
           // iterations.
           if (disabled[idx]) {
             disabled[idx] *= 2;
