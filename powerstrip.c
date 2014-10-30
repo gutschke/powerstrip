@@ -931,6 +931,7 @@ int main(int argc, char *argv[]) {
     // We have a working network
     if (lastPowercycle) {
       logMsg(LOG_NOTICE, "Network connectivity has been restored");
+      if (system("exec /usr/sbin/unbound-control reload </dev/null >/dev/null 2>&1")){}
     }
     lastPowercycle  = 0;
     powercycleDelay = 0;
