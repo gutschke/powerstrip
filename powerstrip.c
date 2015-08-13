@@ -54,7 +54,7 @@
 #endif
 
 // Collect log messages for this much time until we send them by e-mail
-static const int flushMessageTimeout   = 4*60;
+static const int flushMessageTimeout   = 2*60;
 
 // Number of seconds that we wait for a hostname to resolve and for that
 // host to reply to a HEAD request.
@@ -91,67 +91,158 @@ static const int maxPowercycleDelay    = 8*60*60;
 // pick really big sites, only. We want to be good citizens and minimize the
 // impact that we have on other sites.
 static const char *testHosts[] = {
-  "www.about.com",
-  "www.adobe.com",
-  "www.akamaihd.net",
-  "www.alibaba.com",
-  "www.amazon.com",
-  "www.aol.com",
-  "www.ap.org",
-  "www.apple.com",
-  "www.ard.de",
-  "www.ask.com",
-  "www.bankofamerica.com",
-  "www.berkeley.edu",
-  "www.bing.com",
-  "www.cnet.com",
-  "www.cnn.com",
-  "www.comcast.com",
-  "www.conduit.com",
-  "www.costco.com",
-  "www.craigslist.org",
-  "www.ebay.com",
-  "www.fedex.com",
-  "www.ford.com",
-  "www.ge.com",
-  "www.go.com",
-  "www.google.com",
-  "www.hp.com",
-  "www.imageshack.us",
-  "www.imdb.com",
-  "www.linkedin.com",
-  "www.live.com",
-  "www.mail.ru",
-  "www.microsoft.com",
-  "www.mit.edu",
-  "www.msn.edu",
-  "www.myspace.com",
-  "www.oracle.com",
-  "www.paypal.com",
-  "www.photobucket.com",
-  "www.pinterest.com",
-  "www.reuters.com",
-  "www.safeway.com",
-  "www.stackoverflow.com",
-  "www.tagesschau.de",
-  "www.taobao.com",
-  "www.tumblr.com",
-  "www.twitter.com",
-  "www.ups.com",
-  "www.usps.com",
-  "www.verizon.com",
-  "www.vk.com",
-  "www.walmart.com",
-  "www.web.de",
-  "www.wikipedia.org"
-  "www.wordpress.com",
-  "www.yahoo.com",
-  "www.yandex.ru",
-  "www.youtube.com",
+  "about.com",
+  "adobe.com",
+  "akamai.com",
+  "alibaba.com",
+  "amazon.com",
+  "aol.com",
+  "ap.org",
+  "apple.com",
+  "ard.de",
+  "ask.com",
+  "bankofamerica.com",
+  "berkeley.edu", // IPv6 enabled
+  "biglobe.ne.jp", // IPv6 enabled
+  "bing.com",
+  "blogger.com", // IPv6 enabled
+  "blogspot.com", // IPv6 enabled
+  "cisco.com", // IPv6 enabled
+  "cloudflare.com", // IPv6 enabled
+  "cnet.com",
+  "cnn.com",
+  "comcast.com",
+  "conduit.com",
+  "costco.com",
+  "craigslist.org",
+  "creativecommons.org", // IPv6 enabled
+  "deliciousdays.com", // IPv6 enabled
+  "ebay.com",
+  "ed.gov", // IPv6 enabled
+  "edublogs.org", // IPv6 enabled
+  "epa.gov", // IPv6 enabled
+  "europa.eu", // IPv6 enabled
+  "example.com", // IPv6 enabled
+  "facebook.com", // IPv6 enabled
+  "fedex.com",
+  "feedburner.com", // IPv6 enabled
+  "ford.com",
+  "free.fr", // IPv6 enabled
+  "friendfeed.com", // IPv6 enabled
+  "g.co", // IPv6 enabled
+  "ge.com",
+  "go.com",
+  "goo.gl", // IPv6 enabled
+  "google.com", // IPv6 enabled
+  "home.pl", // IPv6 enabled
+  "hp.com",
+  "hud.gov", // IPv6 enabled
+  "imageshack.us",
+  "imdb.com",
+  "is.gd", // IPv6 enabled
+  "java.com", // IPv6 enabled
+  "linkedin.com",
+  "live.com",
+  "mail.ru",
+  "mapy.cz", // IPv6 enabled
+  "microsoft.com",
+  "mit.edu", // IPv6 enabled
+  "mozilla.org", // IPv6 enabled
+  "msn.edu",
+  "nih.gov", // IPv6 enabled
+  "noaa.gov", // IPv6 enabled
+  "oracle.com",
+  "patch.com", // IPv6 enabled
+  "paypal.com",
+  "pen.io", // IPv6 enabled
+  "photobucket.com",
+  "php.net", // IPv6 enabled
+  "pinterest.com",
+  "reuters.com",
+  "safeway.com",
+  "si.edu", // IPv6 enabled
+  "stackoverflow.com",
+  "stanford.edu", // IPv6 enabled
+  "state.gov", // IPv6 enabled
+  "t-online.de", // IPv6 enabled
+  "tagesschau.de",
+  "tamu.edu", // IPv6 enabled
+  "taobao.com",
+  "tumblr.com",
+  "twitter.com",
+  "ucla.edu", // IPv6 enabled
+  "unc.edu", // IPv6 enabled
+  "uol.com.br", // IPv6 enabled
+  "ups.com",
+  "usa.gov", // IPv6 enabled
+  "usgs.gov", // IPv6 enabled
+  "usps.com",
+  "va.gov", // IPv6 enabled
+  "verizon.com",
+  "vk.com", // IPv6 enabled
+  "vkontakte.ru", // IPv6 enabled
+  "volkswagen.de",
+  "walmart.com",
+  "web.de",
+  "whitehouse.gov", // IPv6 enabled
+  "wikimedia.org", // IPv6 enabled
+  "wikipedia.org", // IPv6 enabled
+  "wordpress.com",
+  "yahoo.com", // IPv6 enabled
+  "yandex.ru",
+  "yolasite.com", // IPv6 enabled
+  "youtube.com", // IPv6 enabled
 };
 static const int numHosts = sizeof(testHosts)/sizeof(char *);
-static time_t lastPowercycle;
-static time_t powercycleDelay;
+static time_t lastPowercycle[2];
+static time_t powercycleDelay[2];
+
+#ifdef TRACING
+static const int TRACEFD = 100;
+static void TRACEap(const char *format, va_list ap) {
+  size_t size = 80;
+  char *buf = malloc(size);
+  for (;;) {
+    va_list ap1;
+    va_copy(ap1, ap);
+    ssize_t rc = vsnprintf(buf, size, format, ap1);
+    va_end(ap1);
+    if (rc < 0) {
+      size = 0;
+      break;
+    } else if (rc == (ssize_t)size-1) {
+      size = size < 4094 ? size*2 : size + 4096;
+      char *ptr = realloc(buf, size);
+      if (ptr) {
+        buf = ptr;
+      } else {
+        size = rc;
+        break;
+      }
+    } else {
+      size = rc;
+      break;
+    }
+  }
+  if (size > 0) {
+    if (buf[size-1] != '\n') {
+      buf[size++] = '\n';
+    }
+    write(TRACEFD, buf, size);
+  }
+  free(buf);
+}
+#endif
+static void TRACE(const char *format, ...)
+  __attribute__((format(printf, 1, 2)));
+static void TRACE(const char *format, ...) {
+#ifdef TRACING
+  va_list ap;
+  va_start(ap, format);
+  TRACEap(format, ap);
+  va_end(ap);
+#endif
+}
 
 static void logMsg(int priority, const char *format, ...)
   __attribute__((format(printf, 2, 3)));
@@ -166,10 +257,16 @@ static void logMsg(int priority, const char *format, ...) {
   // Write message to syslog.
   va_list ap0, ap1;
   va_start(ap0, format);
+#ifdef TRACING
+  va_list ap2;
+  va_copy(ap2, ap0);
+  TRACEap(format, ap2);
+  va_end(ap2);
+#endif
+
   va_copy(ap1, ap0);
   vsyslog(priority, format, ap0);
   va_end(ap0);
-
 
   // If the program was configured for sending e-mail, spawn helper thread
   // unless we have already done so.
@@ -197,9 +294,17 @@ static void logMsg(int priority, const char *format, ...) {
       int failedTries = 0;
       for (char *msg = NULL;;) {
         char buf[256];
-        ssize_t len = read(fds[0], buf, sizeof(buf));
-        if (len <= 0) {
-          if ((len < 0 && errno == EINTR) ||
+        size_t len = 0;
+        ssize_t rc = read(fds[0], buf, 1);
+        if ((len = rc) == 1) {
+          alarm(flushMessageTimeout);
+          rc = read(fds[0], buf+1, sizeof(buf)-1);
+          if (rc >= 0) {
+            len += rc;
+          }
+        }
+        if (rc <= 0) {
+          if ((rc < 0 && errno == EINTR) ||
               (msg && (len == 0 || errno == EPIPE))) {
             // If the timeout expired, try to flush all pending messages.
             alarm(0);
@@ -228,6 +333,7 @@ static void logMsg(int priority, const char *format, ...) {
                           host->ai_protocol);
               if (fd >= 0) {
                 if (!connect(fd, host->ai_addr, host->ai_addrlen)) {
+                  TRACE("Connected to mail server");
                   break;
                 }
                 close(fd);
@@ -236,6 +342,7 @@ static void logMsg(int priority, const char *format, ...) {
               if (!host) {
                 // Couldn't connect to any mail server. Retry next time.
                 freeaddrinfo(res);
+                TRACE("Couldn't connect to any mail servers");
                 goto mailFailed;
               }
             }
@@ -404,10 +511,19 @@ static struct cache *findHost(const char *host, socklen_t addrlen) {
       }
     }
   }
+  TRACE("findHost(\"%s\") -> %s", host,
+        (*cache)->family == AF_INET6 ? "IPv6" :
+        (*cache)->family == AF_INET  ? "IPv4" : "cache miss");
   return *cache;
 }
 
-static int checkHosts(const char **hosts, int num, int tmo) {
+// Returns >=0 on success and <0 on failure. If additional information is
+// available, it returns 4, if the connection was made with IPv4 or 6 if made
+// with IPv6. Return 46, if both IPv4 and IPv6 has successfully been tested.
+// Returns -4 if the host could not be reached on the desired network, but would
+// possibly have been reachable on IPv4. -6 if the host could not be reached on
+// the desired network, but would possibly have been reachable on IPv6.
+static int checkHosts(int mode, const char **hosts, int num, int tmo) {
   pid_t pids[num];
   memset(pids, 0, sizeof(pids));
   int fds[2];
@@ -428,30 +544,45 @@ static int checkHosts(const char **hosts, int num, int tmo) {
       struct addrinfo *res = NULL, *host = NULL;
       struct addrinfo hints = { .ai_socktype = SOCK_STREAM,
                                 .ai_flags    = AI_NUMERICSERV|
-                                               AI_ADDRCONFIG };
+                                               AI_ADDRCONFIG,
+                                .ai_family   = mode == 4 ? AF_INET :
+                                               mode == 6 ? AF_INET6 :
+                                                           AF_UNSPEC };
       int fd;
       if (getaddrinfo(hosts[i], "80", &hints, &res) || !res) {
         // Intermittend DNS failures are somewhat common and not
         // necessarily indicative of an overall network problem.
         // If available, try using cached DNS information until
         // DNS service starts working again.
+        TRACE("getaddrinfo(\"%s\", AF_%s) -> failed",
+              hosts[i], mode == 4 ? "INET" : mode == 6 ? "INET6" : "UNSPEC");
         res = NULL;
         struct cache *cached = findHost(hosts[i], 0);
         if (cached && cached->addrlen > 0) {
+          if ((mode == 4 && cached->family != AF_INET) ||
+              (mode == 6 && cached->family != AF_INET6)) {
+            TRACE("Cache doesn't have a suitable entry either");
+            _exit(mode == 4 ? 6 : mode == 6 ? 4 : 46);
+          }
           if ((fd = socket(cached->family, cached->socktype,
                            cached->protocol)) < 0 ||
               connect(fd, &cached->addr, cached->addrlen) < 0) {
             _exit(1);
           }
         } else {
+          TRACE("No cached entry found");
           _exit(1);
         }
       } else {
+        TRACE("getaddrinfo(\"%s\", AF_%s) -> OK",
+              hosts[i], mode == 4 ? "INET" : mode == 6 ? "INET6" : "UNSPEC");
         host = res;
         for (;;) {
           fd = socket(host->ai_family, host->ai_socktype, host->ai_protocol);
           if (fd >= 0) {
             if (!connect(fd, host->ai_addr, host->ai_addrlen)) {
+              TRACE("Sucessfully connected to \"%s\" using IPv%d", hosts[i],
+                    host->ai_family == AF_INET ? 4 : 6);
               break;
             }
             close(fd);
@@ -461,6 +592,7 @@ static int checkHosts(const char **hosts, int num, int tmo) {
             if (res != NULL) {
               freeaddrinfo(res);
             }
+            TRACE("No connection possible");
             _exit(1);
           }
         }
@@ -486,6 +618,7 @@ static int checkHosts(const char **hosts, int num, int tmo) {
         if (res != NULL) {
           freeaddrinfo(res);
         }
+        TRACE("Connected, but unresponsive");
         _exit(1);
       }
       char resp;
@@ -494,6 +627,7 @@ static int checkHosts(const char **hosts, int num, int tmo) {
         shutdown(fd, SHUT_RDWR);
         close(fd);
         freeaddrinfo(res);
+        TRACE("Connected, but unresponsive");
         _exit(1);
       }
       shutdown(fd, SHUT_RDWR);
@@ -544,20 +678,21 @@ static int checkHosts(const char **hosts, int num, int tmo) {
     fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
     size_t len = 0, needed = sizeof(hdr);
     for (char *ptr = (char *)&hdr; len < needed; ) {
-      ssize_t rc = read(fds[0], ptr + len, needed - len);
-      if (rc < 0 && errno == EINTR) {
+      ssize_t readCount = read(fds[0], ptr + len, needed - len);
+      if (readCount < 0 && errno == EINTR) {
         if (ptr != (char *)&hdr) {
           free(ptr);
         }
         goto kill;
-      } else if ((rc == 0 || (rc < 0 && errno == EAGAIN)) && len == 0) {
+      } else if ((readCount == 0 ||
+                  (readCount < 0 && errno == EAGAIN)) && len == 0) {
         break;
-      } else if (rc > 0) {
+      } else if (readCount > 0) {
         if (len == 0 && ptr == (char *)&hdr) {
           // Use blocking reads for the rest of the data.
           fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) & ~O_NONBLOCK);
         }
-        len += rc;
+        len += readCount;
         if (len == needed) {
           if (ptr == (char *)&hdr) {
             len    = 0;
@@ -566,12 +701,16 @@ static int checkHosts(const char **hosts, int num, int tmo) {
           } else {
             // Update the DNS cache.
             struct cache *host = findHost(hosts[hdr.idx], hdr.addrlen);
+            TRACE("Updating cache entry for \"%s\"", hosts[hdr.idx]);
             host->family   = hdr.family;
             host->socktype = hdr.socktype;
             host->protocol = hdr.protocol;
             host->addrlen  = hdr.addrlen;
             memcpy(&host->addr, ptr, hdr.addrlen);
             free(ptr);
+            if (rc < 0) rc = 0;
+            if (host->family == AF_INET ) rc = rc == 6 || rc == 46 ? 46 : 4;
+            if (host->family == AF_INET6) rc = rc == 4 || rc == 46 ? 46 : 6;
             goto next;
           }
         }
@@ -584,7 +723,9 @@ static int checkHosts(const char **hosts, int num, int tmo) {
         pids[i] = 0;
         --running;
         if (WIFEXITED(status) && !WEXITSTATUS(status)) {
-          rc = 0;
+          if (rc < 0) {
+            rc = 0;
+          }
 
           // Kill all other child processes that might have taken longer
           // to complete their task.
@@ -593,6 +734,10 @@ static int checkHosts(const char **hosts, int num, int tmo) {
             if (pids[j] > 0) {
               kill(pids[j], SIGKILL);
             }
+          }
+        } else if (WIFEXITED(status) && num == 1) {
+          if (WEXITSTATUS(status) == 4 || WEXITSTATUS(status) == 6) {
+            rc = -WEXITSTATUS(status);
           }
         }
         break;
@@ -605,6 +750,8 @@ static int checkHosts(const char **hosts, int num, int tmo) {
 }
 
 static void switchPower(int state, int port) {
+  TRACE("Switching power %s for %s", state ? "on" : "off",
+        port ? "network switch" : "modem");
 #ifdef serialPort
   int fd = TEMP_FAILURE_RETRY(open(serialPort, O_RDWR | O_NOCTTY | O_SYNC));
   if (fd < 0) {
@@ -763,22 +910,25 @@ static void switchPower(int state, int port) {
 #endif
 }
 
-static void networkFailed(void) {
+static void networkFailed(int mode) {
+  int idx = mode == 6;
+
   // Exponentially increase the time between attempts to power cycle the
   // networking equipment.
   time_t tm = time(NULL);
-  if (lastPowercycle && tm - lastPowercycle < powercycleDelay) {
+  if (lastPowercycle[idx] && tm - lastPowercycle[idx] < powercycleDelay[idx]) {
     return;
   }
   logMsg(LOG_WARNING,
-         "Network appears to be down. Power cycling networking equipment");
-  lastPowercycle = tm;
-  if (!powercycleDelay) {
-    powercycleDelay = minPowercycleDelay;
+         "Network appears to be down. %sPower cycling networking equipment",
+         mode == 6 ? "This appears to affect IPv6 only! " : "");
+  lastPowercycle[idx] = tm;
+  if (!powercycleDelay[idx]) {
+    powercycleDelay[idx] = minPowercycleDelay;
   } else {
-    powercycleDelay *= 2;
-    if (powercycleDelay > maxPowercycleDelay) {
-      powercycleDelay = maxPowercycleDelay;
+    powercycleDelay[idx] *= 2;
+    if (powercycleDelay[idx] > maxPowercycleDelay) {
+      powercycleDelay[idx] = maxPowercycleDelay;
     }
   }
   switchPower(0, 0);
@@ -789,7 +939,152 @@ static void networkFailed(void) {
 static void alrm(int signo) {
 }
 
+// Checks if the network is currently accessible. Queries can be done for
+// IPv4 (mode=4), IPv6 (mode=6) or both (mode=46). Updates idx, disabled, and
+// skipping. Returns -1 in case of any type of error (this doesn't necessarily
+// indicate whether the network actually is down, though!). Return a positive
+// number, if network is OK. Might return 4, 6, or 46 if more details are
+// available on whether a particular network type is available.
+static int checkNetwork(int mode, int *idx, int *disabled, int *skipping) {
+  // It is possible although unlikely that the network fails in a way that
+  // all hosts have become disabled. This does not normally happen, as we
+  // would typically detect that the entire network has disappeared and we
+  // then no longer disable individual hosts.
+  // But even if we did remove all hosts, that is OK. We will then loop
+  // through all iterations until we have restored at least one host for
+  // probing. This is slightly CPU inefficient, but the number of iterations
+  // are bounded by maxDisabledIterations*numHosts, which is usually a
+  // reasonably small number.
+  for (;;) {
+    *idx = (*idx + 1) % numHosts;
+
+    // Skip disabled hosts for a couple of iterations
+    if (!skipping[*idx] || !--skipping[*idx]) {
+      break;
+    }
+  }
+  TRACE("checkNetwork(AF_%s, \"%s\")",
+        mode == 4 ? "INET" : mode == 6 ? "INET6" : "UNSPEC", testHosts[*idx]);
+
+  int rc = checkHosts(mode, testHosts + *idx, 1, longHostTimeOut);
+  if (rc < -1) {
+    // This particular host cannot be reached with the given networking "mode".
+    // (e.g. this might be a IPv4 only host, but we are requesting a IPv6
+    // query).
+    TRACE("Host \"%s\" cannot be reached on this network type",
+          testHosts[*idx]);
+    if (disabled[*idx]) {
+      disabled[*idx] *= 2;
+      if (disabled[*idx] > maxDisabledIterations) {
+        disabled[*idx] = maxDisabledIterations;
+      }
+    } else {
+      disabled[*idx] = 1;
+    }
+    skipping[*idx] = disabled[*idx];
+    return -1;
+  }
+
+  if (rc < 0 &&
+      checkHosts(mode, testHosts + *idx, 1, 2*longHostTimeOut) < 0 &&
+      checkHosts(mode, testHosts + *idx, 1, 4*longHostTimeOut) < 0) {
+    // If even a single host replies, we know that the network still works,
+    // and we can ignore the failure of any other hosts.
+    // As some hosts in our list might have died temporarily or even
+    // permanently, upon encountering a failure we shuffle the remaining
+    // lists of hosts, and test against an increasingly larger subset of
+    // them. This gives a good trade-off between taking a long time to
+    // detect network failure, and between needlessly hitting a large
+    // number of hosts.
+    //
+    // Create list of hosts that we need to test against.
+    int setSize = 0;
+    const char *hosts[numHosts-1];
+    memset(hosts, 0, sizeof(hosts));
+
+    for (int i = 0; i < numHosts; ++i) {
+      if (i == *idx) {
+        continue;
+      }
+      if (!disabled[i]) {
+        hosts[setSize++] = testHosts[i];
+      }
+    }
+
+    // Shuffle lists of hosts
+    for (int i = 0; i < setSize-1; ++i) {
+      int swap = i + rand() % (setSize - i);
+      const char *tmp = hosts[i];
+      hosts[i] = hosts[swap];
+      hosts[swap] = tmp;
+    }
+
+    // Test hosts
+    for (int start = 0, step = 1; start < setSize; ) {
+      if (start + step > setSize) {
+        step = setSize-start;
+      }
+      if ((rc = checkHosts(mode, hosts + start, step, shortHostTimeOut)) >= 0) {
+        // The network is still up, but one of our hosts is down.
+        // Disable this host for an exponentially larger number of
+        // iterations.
+        if (disabled[*idx]) {
+          disabled[*idx] *= 2;
+          if (disabled[*idx] > maxDisabledIterations) {
+            disabled[*idx] = maxDisabledIterations;
+          }
+        } else {
+          if (mode == 46) {
+            logMsg(LOG_WARNING, "Network is up, but \"%s\" is unreachable",
+                   testHosts[*idx]);
+          }
+          disabled[*idx] = 1;
+        }
+        skipping[*idx] = disabled[*idx];
+        goto success;
+      }
+
+      // Double the number of hosts tested in parallel on each iteration.
+      start += step;
+      step  *= 2;
+    }
+
+    // Our network appears to be down
+    networkFailed(mode);
+    sleep(probeSleep);
+    return -1;
+  } else {
+    if (disabled[*idx]) {
+      logMsg(LOG_NOTICE, "Restored access to \"%s\"", testHosts[*idx]);
+    }
+    disabled[*idx] = 0;
+    skipping[*idx] = 0;
+  }
+success:;
+  // We have a working network
+  int i = mode == 6;
+  if (lastPowercycle[0] || lastPowercycle[i]) {
+    logMsg(LOG_NOTICE, "Network connectivity has been restored");
+    if (system(
+      "exec /usr/sbin/unbound-control reload </dev/null >/dev/null 2>&1")){}
+  }
+  lastPowercycle[0]  = lastPowercycle[i]  = 0;
+  powercycleDelay[0] = powercycleDelay[i] = 0;
+
+  return rc;
+}
+
 int main(int argc, char *argv[]) {
+#ifdef TRACING
+  dup2(2, TRACEFD);
+#endif
+  // Install a signal handler for SIGALRM. This signal handler doesn't actually
+  // do anything. But having a signal handler means that upon receiving a
+  // timeout from alarm(), any pending system call will return with EINTR.
+  struct sigaction sa = { .sa_flags = 0 };
+  sa.sa_handler = alrm;
+  sigaction(SIGALRM, &sa, NULL);
+
   if ((argc >= 2 && argc <= 4) &&
       (strstr(argv[1], "cycle") ||
        !strcmp(argv[1], "on") || !strcmp(argv[1], "off"))) {
@@ -815,13 +1110,6 @@ int main(int argc, char *argv[]) {
   switchPower(1, 0);
   switchPower(1, 1);
 
-  // Install a signal handler for SIGALRM. This signal handler doesn't actually
-  // do anything. But having a signal handler means that upon receiving a
-  // timeout from alarm(), any pending system call will return with EINTR.
-  struct sigaction sa = { .sa_flags = 0 };
-  sa.sa_handler = alrm;
-  sigaction(SIGALRM, &sa, NULL);
-
   // This program is intended to be run as a system daemon. Don't write any
   // messages to stdout, but log all status updates to syslog.
   // logMsg(LOG_NOTICE, "Starting powerstrip daemon");
@@ -830,111 +1118,33 @@ int main(int argc, char *argv[]) {
   // unresponsive. We record an exponentially increasing number of iterations
   // that these hosts are exempt from probing, and we also keep a counter of
   // how many iterations we are still skipping until the next probe.
-  int disabled[numHosts];
-  int skipping[numHosts];
-  memset(disabled, 0, sizeof(disabled));
-  memset(skipping, 0, sizeof(skipping));
+  int idx46 = -1, idx6 = -1;
+  int disabled46[numHosts], disabled6[numHosts];
+  int skipping46[numHosts], skipping6[numHosts];
+  memset(disabled46, 0, sizeof(disabled46));
+  memset(skipping46, 0, sizeof(skipping46));
+  memset(disabled6,  0, sizeof(disabled6));
+  memset(skipping6,  0, sizeof(skipping6));
 
-  for (int idx = -1;;) {
-    // It is possible although unlikely that the network fails in a way that
-    // all hosts have become disabled. This does not normally happen, as we
-    // would typically detect that the entire network has disappeared and we
-    // then no longer disable individual hosts.
-    // But even if we did remove all hosts, that is OK. We will then loop
-    // through all iterations until we have restored at least one host for
-    // probing. This is slightly CPU inefficient, but the number of iterations
-    // are bounded by maxDisabledIterations*numHosts, which is usually a
-    // reasonably small number.
-    for (;;) {
-      idx = (idx + 1) % numHosts;
+  for (;;) {
+    int rc = checkNetwork(46, &idx46, disabled46, skipping46);
 
-      // Skip disabled hosts for a couple of iterations
-      if (!skipping[idx] || !--skipping[idx]) {
-        break;
+    // We observe the IPv6 connectivity frequently goes down, even the modem
+    // is otherwise working just fine. This gives a false reading, as many
+    // hosts can be reached on both IPv4 and IPv6. So, we have to explicitly
+    // check for IPv6 at all times.
+    #ifndef NOIPV6TESTS
+    if (rc != 6 && rc != 46) {
+      for (int i = numHosts; --i; ) {
+        if (checkNetwork(6, &idx6, disabled6, skipping6) >= 0) {
+          break;
+        }
       }
     }
-
-    if (checkHosts(testHosts + idx, 1, longHostTimeOut) &&
-        checkHosts(testHosts + idx, 1, 2*longHostTimeOut) &&
-        checkHosts(testHosts + idx, 1, 4*longHostTimeOut)) {
-      // If even a single host replies, we know that the network still works,
-      // and we can ignore the failure of any other hosts.
-      // As some hosts in our list might have died temporarily or even
-      // permanently, upon encountering a failure we shuffle the remaining
-      // lists of hosts, and test against an increasingly larger subset of
-      // them. This gives a good trade-off between taking a long time to
-      // detect network failure, and between needlessly hitting a large
-      // number of hosts.
-      //
-      // Create list of hosts that we need to test against.
-      int setSize = 0;
-      const char *hosts[numHosts-1];
-      memset(hosts, 0, sizeof(hosts));
-
-      for (int i = 0; i < numHosts; ++i) {
-        if (i == idx) {
-          continue;
-        }
-        if (!disabled[i]) {
-          hosts[setSize++] = testHosts[i];
-        }
-      }
-
-      // Shuffle lists of hosts
-      for (int i = 0; i < setSize-1; ++i) {
-        int swap = i + rand() % (setSize - i);
-        const char *tmp = hosts[i];
-        hosts[i] = hosts[swap];
-        hosts[swap] = tmp;
-      }
-
-      // Test hosts
-      for (int start = 0, step = 1; start < setSize; ) {
-        if (start + step > setSize) {
-          step = setSize-start;
-        }
-        if (!checkHosts(hosts + start, step, shortHostTimeOut)) {
-          // The network is still up, but one of our hosts is down.
-          // Disable this host for an exponentially larger number of
-          // iterations.
-          if (disabled[idx]) {
-            disabled[idx] *= 2;
-            if (disabled[idx] > maxDisabledIterations) {
-              disabled[idx] = maxDisabledIterations;
-            }
-          } else {
-            logMsg(LOG_WARNING, "Network is up, but \"%s\" is unreachable",
-                   testHosts[idx]);
-            disabled[idx] = 1;
-          }
-          skipping[idx] = disabled[idx];
-          goto success;
-        }
-
-        // Double the number of hosts tested in parallel on each iteration.
-        start += step;
-        step  *= 2;
-      }
-
-      // Our network appears to be down
-      networkFailed();
-      sleep(probeSleep);
-      continue;
-    } else {
-      if (disabled[idx]) {
-        logMsg(LOG_NOTICE, "Restored access to \"%s\"", testHosts[idx]);
-      }
-      disabled[idx] = 0;
-      skipping[idx] = 0;
-    }
-  success:
-    // We have a working network
-    if (lastPowercycle) {
-      logMsg(LOG_NOTICE, "Network connectivity has been restored");
-      if (system("exec /usr/sbin/unbound-control reload </dev/null >/dev/null 2>&1")){}
-    }
-    lastPowercycle  = 0;
-    powercycleDelay = 0;
+    #endif
+    #ifdef TRACING
+    write(TRACEFD, "\n", 1);
+    #endif
     sleep(probeSleep);
   }
 }

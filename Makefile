@@ -7,9 +7,9 @@ CFLAGS=-g -O3 -std=gnu99
 LDFLAGS=-lusb
 CFGFLAGS=
 ifdef USER
-CFGFLAGS+= -DemailUser='"$(USER)"'
+CFGFLAGS+= -DemailUser='"$(USER)@$(DOMAIN)"'
 ifdef DOMAIN
-CFGFLAGS+= -DmailServer='"$(DOMAIN)"'
+CFGFLAGS+= -DmailServer='"smtp.$(DOMAIN)"'
 endif
 endif
 ifdef SERIAL
@@ -22,4 +22,4 @@ clean:
 	$(RM) -f powerstrip
 
 powerstrip: powerstrip.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(CFGFLAGS) $(LDFLAGS) -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(CFGFLAGS) $(LDFLAGS) $(XTRA) -o $@ $<
