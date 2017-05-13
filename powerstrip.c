@@ -58,8 +58,8 @@ static const int flushMessageTimeout   = 2*60;
 
 // Number of seconds that we wait for a hostname to resolve and for that
 // host to reply to a HEAD request.
-static const int longHostTimeOut       = 8;
-static const int shortHostTimeOut      = 1;
+static const int longHostTimeOut       = 20;
+static const int shortHostTimeOut      = 5;
 
 // Number of seconds that we sleep between probing the network.
 static const int probeSleep            = 45;
@@ -136,7 +136,7 @@ static const char *testHosts[] = {
   "google.com", // IPv6 enabled
   "home.pl", // IPv6 enabled
   "hp.com",
-  "hud.gov", // IPv6 enabled
+//"hud.gov", // IPv6 enabled
   "imageshack.us",
   "imdb.com",
   "is.gd", // IPv6 enabled
@@ -160,28 +160,28 @@ static const char *testHosts[] = {
   "pinterest.com",
   "reuters.com",
   "safeway.com",
-  "si.edu", // IPv6 enabled
+//"si.edu", // IPv6 enabled
   "stackoverflow.com",
-  "stanford.edu", // IPv6 enabled
+//"stanford.edu", // IPv6 enabled
   "state.gov", // IPv6 enabled
-  "t-online.de", // IPv6 enabled
+//"t-online.de", // IPv6 enabled
   "tagesschau.de",
   "tamu.edu", // IPv6 enabled
-  "taobao.com",
+//"taobao.com",
   "tumblr.com",
   "twitter.com",
   "ucla.edu", // IPv6 enabled
   "unc.edu", // IPv6 enabled
   "uol.com.br", // IPv6 enabled
   "ups.com",
-  "usa.gov", // IPv6 enabled
-  "usgs.gov", // IPv6 enabled
+//"usa.gov", // IPv6 enabled
+//"usgs.gov", // IPv6 enabled
   "usps.com",
   "va.gov", // IPv6 enabled
   "verizon.com",
-  "vk.com", // IPv6 enabled
+//"vk.com", // IPv6 enabled
   "vkontakte.ru", // IPv6 enabled
-  "volkswagen.de",
+//"volkswagen.de",
   "walmart.com",
   "web.de",
   "whitehouse.gov", // IPv6 enabled
@@ -189,7 +189,7 @@ static const char *testHosts[] = {
   "wikipedia.org", // IPv6 enabled
   "wordpress.com",
   "yahoo.com", // IPv6 enabled
-  "yandex.ru",
+//"yandex.ru",
   "yolasite.com", // IPv6 enabled
   "youtube.com", // IPv6 enabled
 };
@@ -228,7 +228,7 @@ static void TRACEap(const char *format, va_list ap) {
     if (buf[size-1] != '\n') {
       buf[size++] = '\n';
     }
-    write(TRACEFD, buf, size);
+    if (write(TRACEFD, buf, size)) {}
   }
   free(buf);
 }
@@ -271,213 +271,215 @@ static void logMsg(int priority, const char *format, ...) {
   // If the program was configured for sending e-mail, spawn helper thread
   // unless we have already done so.
 #if defined(emailUser)
-  static FILE *logger;
-  if (!logger) {
-    int fds[2];
-    if (pipe(fds)) {
-      // Something went wrong. Skip this message but retry next time.
-      return;
-    }
-    pid_t pid = fork();
-    if (pid < 0) {
-      // Something went wrong. Skip this message but retry next time.
-      close(fds[0]);
-      close(fds[1]);
-      return;
-    } else if (pid == 0) {
-      // In child process
-      close(fds[1]);
-      alarm(0);
+  if (priority <= LOG_WARNING) {
+    static FILE *logger;
+    if (!logger) {
+      int fds[2];
+      if (pipe(fds)) {
+        // Something went wrong. Skip this message but retry next time.
+        return;
+      }
+      pid_t pid = fork();
+      if (pid < 0) {
+        // Something went wrong. Skip this message but retry next time.
+        close(fds[0]);
+        close(fds[1]);
+        return;
+      } else if (pid == 0) {
+        // In child process
+        close(fds[1]);
+        alarm(0);
 
-      // In a loop, read messages and send them by e-mail if we haven't
-      // received any message in "flushMessageTimeout" seconds.
-      int failedTries = 0;
-      for (char *msg = NULL;;) {
-        char buf[256];
-        size_t len = 0;
-        ssize_t rc = read(fds[0], buf, 1);
-        if ((len = rc) == 1) {
-          alarm(flushMessageTimeout);
-          rc = read(fds[0], buf+1, sizeof(buf)-1);
-          if (rc >= 0) {
-            len += rc;
+        // In a loop, read messages and send them by e-mail if we haven't
+        // received any message in "flushMessageTimeout" seconds.
+        int failedTries = 0;
+        for (char *msg = NULL;;) {
+          char buf[256];
+          size_t len = 0;
+          ssize_t rc = read(fds[0], buf, 1);
+          if ((len = rc) == 1) {
+            alarm(flushMessageTimeout);
+            rc = read(fds[0], buf+1, sizeof(buf)-1);
+            if (rc >= 0) {
+              len += rc;
+            }
           }
-        }
-        if (rc <= 0) {
-          if ((rc < 0 && errno == EINTR) ||
-              (msg && (len == 0 || errno == EPIPE))) {
-            // If the timeout expired, try to flush all pending messages.
-            alarm(0);
-            if (!msg) {
-              // We don't actually have any message. This should never happen.
-              goto mailFailed;
-            }
-
-#if !defined(mailServer)
-            // If no mailserver was configure, connect to localhost instead.
-            static const char mailServer[] = "localhost";
-#endif
-            struct addrinfo *res;
-            struct addrinfo hints = { .ai_socktype = SOCK_STREAM,
-                                      .ai_flags    = AI_ADDRCONFIG };
-            if (getaddrinfo(mailServer, "smtp", &hints, &res) || !res) {
-              // DNS failed (temporarily). Retry next time.
-              goto mailFailed;
-            }
-
-            // Iterate through all possible addresses until we find one that
-            // we can connect to.
-            int fd;
-            for (struct addrinfo *host = res; ;) {
-              fd = socket(host->ai_family, host->ai_socktype,
-                          host->ai_protocol);
-              if (fd >= 0) {
-                if (!connect(fd, host->ai_addr, host->ai_addrlen)) {
-                  TRACE("Connected to mail server");
-                  break;
-                }
-                close(fd);
-              }
-              host = host->ai_next;
-              if (!host) {
-                // Couldn't connect to any mail server. Retry next time.
-                freeaddrinfo(res);
-                TRACE("Couldn't connect to any mail servers");
+          if (rc <= 0) {
+            if ((rc < 0 && errno == EINTR) ||
+                (msg && (len == 0 || errno == EPIPE))) {
+              // If the timeout expired, try to flush all pending messages.
+              alarm(0);
+              if (!msg) {
+                // We don't actually have any message. This should never happen.
                 goto mailFailed;
               }
-            }
-            freeaddrinfo(res);
 
-            // Obtain the FQDN for the local machine.
-            #if !defined(HOST_NAME_MAX)
-            #define HOST_NAME_MAX 64
-            #endif
-            char hostname[HOST_NAME_MAX+1] = { 0 };
-            char domainname[256] = { 0 };
-            if (gethostname(hostname, sizeof(hostname)-1)) {
-              strcpy(hostname, "localhost");
-            }
-            if (getdomainname(domainname, sizeof(domainname)-1) ||
-                !*domainname || !strcmp(domainname, "(none)")) {
-              strcpy(domainname, "localdomain");
-            }
-
-            // Convert our file descriptor to a file handle. This should never
-            // fail. But if it does, retry next time.
-            FILE *smtp = fdopen(fd, "w");
-            if (!smtp) {
-              close(fd);
-              continue;
-            }
-
-            // The subject line is made up of the very first log message in
-            // the e-mail. Make sure to skip the time stamp, though.
-            static const char prefix[] = "[powerstrip] ";
-            char *subject = NULL;
-            char *startPtr = strstr(msg, "    ");
-            if (startPtr) {
-              while (*startPtr == ' ') {
-                ++startPtr;
+#if !defined(mailServer)
+              // If no mailserver was configure, connect to localhost instead.
+              static const char mailServer[] = "localhost";
+#endif
+              struct addrinfo *res;
+              struct addrinfo hints = { .ai_socktype = SOCK_STREAM,
+                                        .ai_flags    = AI_ADDRCONFIG };
+              if (getaddrinfo(mailServer, "smtp", &hints, &res) || !res) {
+                // DNS failed (temporarily). Retry next time.
+                goto mailFailed;
               }
-              int subjectLen = strcspn(startPtr, "\r\n");
-              if (subjectLen) {
-                subject = malloc(sizeof(prefix) + subjectLen);
-                if (subject) {
-                  strcpy(subject, prefix);
-                  memcpy(subject + sizeof(prefix) - 1, startPtr, subjectLen);
-                  subject[sizeof(prefix) + subjectLen - 1] = '\000';
+
+              // Iterate through all possible addresses until we find one that
+              // we can connect to.
+              int fd;
+              for (struct addrinfo *host = res; ;) {
+                fd = socket(host->ai_family, host->ai_socktype,
+                            host->ai_protocol);
+                if (fd >= 0) {
+                  if (!connect(fd, host->ai_addr, host->ai_addrlen)) {
+                    TRACE("Connected to mail server");
+                    break;
+                  }
+                  close(fd);
+                }
+                host = host->ai_next;
+                if (!host) {
+                  // Couldn't connect to any mail server. Retry next time.
+                  freeaddrinfo(res);
+                  TRACE("Couldn't connect to any mail servers");
+                  goto mailFailed;
                 }
               }
-            }
+              freeaddrinfo(res);
 
-            // Format e-mail and submit it to the mail server.
-            fprintf(smtp,
-                    "EHLO %s.%s\r\n"
-                    "MAIL FROM: <%s>\r\n"
-                    "RCPT TO: <%s>\r\n"
-                    "DATA\r\n"
-                    "From: <%s>\r\n"
-                    "To: <%s>\r\n"
-                    "Subject: %s\r\n"
-                    "\r\n"
-                    "%s\r\n"
-                    ".\r\n"
-                    "QUIT\r\n",
-                    hostname, domainname,
-                    emailUser,
-                    emailUser,
-                    emailUser,
-                    emailUser,
-                    subject ? subject : "[powerstrip] Status message",
-                    msg);
-
-            // Done. We can now delete our buffered messages.
-            fclose(smtp);
-            free(subject);
-            free(msg);
-            msg = NULL;
-
-          mailFailed:
-            if (msg) {
-              alarm(flushMessageTimeout);
-
-              // If we haven't been able to deliver e-mail in several attempts,
-              // drop the messages. Maybe, the mail server just doesn't work
-              // at all.
-              if (++failedTries >= 10) {
-                failedTries = 0;
-                free(msg);
-                msg = NULL;
+              // Obtain the FQDN for the local machine.
+              #if !defined(HOST_NAME_MAX)
+              #define HOST_NAME_MAX 64
+              #endif
+              char hostname[HOST_NAME_MAX+1] = { 0 };
+              char domainname[256] = { 0 };
+              if (gethostname(hostname, sizeof(hostname)-1)) {
+                strcpy(hostname, "localhost");
               }
+              if (getdomainname(domainname, sizeof(domainname)-1) ||
+                  !*domainname || !strcmp(domainname, "(none)")) {
+                strcpy(domainname, "localdomain");
+              }
+
+              // Convert our file descriptor to a file handle. This should never
+              // fail. But if it does, retry next time.
+              FILE *smtp = fdopen(fd, "w");
+              if (!smtp) {
+                close(fd);
+                continue;
+              }
+
+              // The subject line is made up of the very first log message in
+              // the e-mail. Make sure to skip the time stamp, though.
+              static const char prefix[] = "[powerstrip] ";
+              char *subject = NULL;
+              char *startPtr = strstr(msg, "    ");
+              if (startPtr) {
+                while (*startPtr == ' ') {
+                  ++startPtr;
+                }
+                int subjectLen = strcspn(startPtr, "\r\n");
+                if (subjectLen) {
+                  subject = malloc(sizeof(prefix) + subjectLen);
+                  if (subject) {
+                    strcpy(subject, prefix);
+                    memcpy(subject + sizeof(prefix) - 1, startPtr, subjectLen);
+                    subject[sizeof(prefix) + subjectLen - 1] = '\000';
+                  }
+                }
+              }
+
+              // Format e-mail and submit it to the mail server.
+              fprintf(smtp,
+                      "EHLO %s.%s\r\n"
+                      "MAIL FROM: <%s>\r\n"
+                      "RCPT TO: <%s>\r\n"
+                      "DATA\r\n"
+                      "From: <%s>\r\n"
+                      "To: <%s>\r\n"
+                      "Subject: %s\r\n"
+                      "\r\n"
+                      "%s\r\n"
+                      ".\r\n"
+                      "QUIT\r\n",
+                      hostname, domainname,
+                      emailUser,
+                      emailUser,
+                      emailUser,
+                      emailUser,
+                      subject ? subject : "[powerstrip] Status message",
+                      msg);
+
+              // Done. We can now delete our buffered messages.
+              fclose(smtp);
+              free(subject);
+              free(msg);
+              msg = NULL;
+
+            mailFailed:
+              if (msg) {
+                alarm(flushMessageTimeout);
+
+                // If we haven't been able to deliver e-mail in several attempts,
+                // drop the messages. Maybe, the mail server just doesn't work
+                // at all.
+                if (++failedTries >= 10) {
+                  failedTries = 0;
+                  free(msg);
+                  msg = NULL;
+                }
+              }
+              continue;
+            }
+            if (len == 0 || errno == EPIPE) {
+              // The parent went away. Time for us to die.
+              _exit(0);
             }
             continue;
           }
-          if (len == 0 || errno == EPIPE) {
-            // The parent went away. Time for us to die.
-            _exit(0);
+
+          // Extend the time that we wait for additional messages.
+          alarm(flushMessageTimeout);
+
+          // Append new message to the end of the currently buffered messages.
+          char *newMsg = realloc(msg, (msg ? strlen(msg) : 0) + len + 1);
+          if (newMsg == NULL) {
+            // If we cannot buffer this message, just drop it.
+            continue;
           }
-          continue;
+          char *end = newMsg;
+          if (msg) {
+            end = strrchr(newMsg, '\000');
+          }
+          msg = newMsg;
+          memcpy(end, buf, len);
+          end[len] = '\000';
         }
-
-        // Extend the time that we wait for additional messages.
-        alarm(flushMessageTimeout);
-
-        // Append new message to the end of the currently buffered messages.
-        char *newMsg = realloc(msg, (msg ? strlen(msg) : 0) + len + 1);
-        if (newMsg == NULL) {
-          // If we cannot buffer this message, just drop it.
-          continue;
+      } else {
+        // In parent process
+        close(fds[0]);
+        logger = fdopen(fds[1], "w");
+        if (logger == NULL) {
+          close(fds[1]);
+          return;
         }
-        char *end = newMsg;
-        if (msg) {
-          end = strrchr(newMsg, '\000');
-        }
-        msg = newMsg;
-        memcpy(end, buf, len);
-        end[len] = '\000';
-      }
-    } else {
-      // In parent process
-      close(fds[0]);
-      logger = fdopen(fds[1], "w");
-      if (logger == NULL) {
-        close(fds[1]);
-        return;
       }
     }
-  }
 
-  // Send the log message and the current time stamp to the helper process.
-  time_t tm = time(NULL);
-  char *tmString = strdup(ctime(&tm));
-  if (tmString) {
-    *strrchr(tmString, '\n') = '\000';
-    fprintf(logger, "%s        ", tmString);
-    free(tmString);
+    // Send the log message and the current time stamp to the helper process.
+    time_t tm = time(NULL);
+    char *tmString = strdup(ctime(&tm));
+    if (tmString) {
+      *strrchr(tmString, '\n') = '\000';
+      fprintf(logger, "%s        ", tmString);
+      free(tmString);
+    }
+    vfprintf(logger, format, ap1);
+    fprintf(logger, "\n");
+    fflush(logger);
   }
-  vfprintf(logger, format, ap1);
-  fprintf(logger, "\n");
-  fflush(logger);
 #endif
   va_end(ap1);
 }
@@ -1035,7 +1037,7 @@ static int checkNetwork(int mode, int *idx, int *disabled, int *skipping) {
           }
         } else {
           if (mode == 46) {
-            logMsg(LOG_WARNING, "Network is up, but \"%s\" is unreachable",
+            logMsg(LOG_NOTICE, "Network is up, but \"%s\" is unreachable",
                    testHosts[*idx]);
           }
           disabled[*idx] = 1;
@@ -1064,7 +1066,7 @@ success:;
   // We have a working network
   int i = mode == 6;
   if (lastPowercycle[0] || lastPowercycle[i]) {
-    logMsg(LOG_NOTICE, "Network connectivity has been restored");
+    logMsg(LOG_WARNING, "Network connectivity has been restored");
     if (system(
       "exec /usr/sbin/unbound-control reload </dev/null >/dev/null 2>&1")){}
   }
@@ -1112,13 +1114,16 @@ int main(int argc, char *argv[]) {
 
   // This program is intended to be run as a system daemon. Don't write any
   // messages to stdout, but log all status updates to syslog.
-  // logMsg(LOG_NOTICE, "Starting powerstrip daemon");
+  logMsg(LOG_NOTICE, "Starting powerstrip daemon");
 
   // Keep track of hosts that have been disabled because they have become
   // unresponsive. We record an exponentially increasing number of iterations
   // that these hosts are exempt from probing, and we also keep a counter of
   // how many iterations we are still skipping until the next probe.
-  int idx46 = -1, idx6 = -1;
+  int idx46 = -1;
+  #ifndef NOIPV6TESTS
+  int idx6 = -1;
+  #endif
   int disabled46[numHosts], disabled6[numHosts];
   int skipping46[numHosts], skipping6[numHosts];
   memset(disabled46, 0, sizeof(disabled46));
@@ -1127,13 +1132,12 @@ int main(int argc, char *argv[]) {
   memset(skipping6,  0, sizeof(skipping6));
 
   for (;;) {
-    int rc = checkNetwork(46, &idx46, disabled46, skipping46);
-
     // We observe the IPv6 connectivity frequently goes down, even the modem
     // is otherwise working just fine. This gives a false reading, as many
     // hosts can be reached on both IPv4 and IPv6. So, we have to explicitly
     // check for IPv6 at all times.
     #ifndef NOIPV6TESTS
+    int rc = checkNetwork(46, &idx46, disabled46, skipping46);
     if (rc != 6 && rc != 46) {
       for (int i = numHosts; --i; ) {
         if (checkNetwork(6, &idx6, disabled6, skipping6) >= 0) {
@@ -1141,9 +1145,11 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+    #else
+    checkNetwork(4, &idx46, disabled46, skipping46);
     #endif
     #ifdef TRACING
-    write(TRACEFD, "\n", 1);
+    if (write(TRACEFD, "\n", 1)) {}
     #endif
     sleep(probeSleep);
   }
